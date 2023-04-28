@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 import dask
 import dask.dataframe as dd
 import pyarrow.parquet as pq
-from boto3 import Session
 from dask.base import tokenize
 from dask.dataframe.io import from_delayed
 from dask.delayed import delayed
@@ -172,6 +171,8 @@ class DeltaTableWrapper(object):
 def _read_from_catalog(
     database_name: str, table_name: str, **kwargs
 ) -> dd.core.DataFrame:
+    from boto3 import Session
+
     if ("AWS_ACCESS_KEY_ID" not in os.environ) and (
         "AWS_SECRET_ACCESS_KEY" not in os.environ
     ):
