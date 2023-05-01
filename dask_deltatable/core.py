@@ -1,16 +1,17 @@
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union, Tuple, Any
 from urllib.parse import urlparse
 
 import dask
 import dask.dataframe as dd
 import pyarrow.parquet as pq
-from boto3 import Session
+
+# from boto3 import Session
 from dask.base import tokenize
 from dask.dataframe.io import from_delayed
 from dask.delayed import delayed
-from deltalake import DataCatalog, DeltaTable
+from deltalake import DataCatalog, DeltaTable, Metadata
 from fsspec.core import get_fs_token_paths
 from pyarrow import dataset as pa_ds
 
@@ -145,7 +146,7 @@ class DeltaTableWrapper(object):
             ]
         dask.compute(parts)[0]
 
-    def get_pq_files(self) -> List[str]:
+    def get_pq_files(self, partition_filters=None) -> List[str]:
         """
         get the list of parquet files after loading the
         current datetime version
@@ -154,13 +155,19 @@ class DeltaTableWrapper(object):
 
         if self.datetime is not None:
             self.dt.load_with_datetime(self.datetime)
-        return self.dt.file_uris()
+        return self.dt.file_uris(partition_filters=partition_filters)
 
     def read_delta_table(self, **kwargs) -> dd.core.DataFrame:
         """
         Reads the list of parquet files in parallel
         """
-        pq_files = self.get_pq_files()
+        filter = partition_filter = kwargs.get("filter")
+        metadata = self.dt.metadata() or []
+
+        if filter:
+            partition_filter = _build_partition_filter(filter, metadata.partition_columns)
+
+        pq_files = self.get_pq_files(partition_filters=partition_filter)
         if len(pq_files) == 0:
             raise RuntimeError("No Parquet files are available")
         parts = [
@@ -365,3 +372,23 @@ def vacuum(
         delta_storage_options=delta_storage_options,
     )
     return dtw.vacuum(retention_hours=retention_hours, dry_run=dry_run)
+
+
+def _build_partition_filter(
+    filter: Union[List[Tuple[str, str, Any]], List[List[Tuple[str, str, Any]]]], partition_columns: List[str],
+) -> List[List[Tuple[str, str, Any]]]:
+    if len(filter) and isinstance(filter[0], list):
+        return []
+    partition_filter = []
+    partition_columns = set(partition_columns)
+    # if len(filter) and isinstance(filter[0], tuple):
+    #     filter = [filter]
+
+    # not quite right yet.
+    # for expression in filter:
+    # partition_expression = []
+    for (column, condition, value) in filter:
+        if column in partition_columns:
+            partition_filter.append((column, condition, value))
+
+    return partition_filter

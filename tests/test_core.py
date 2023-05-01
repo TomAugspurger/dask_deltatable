@@ -107,13 +107,20 @@ def test_different_schema(simple_table):
 
 def test_partition_filter(partition_table):
     # partition filter
-    df = ddt.read_delta_table(partition_table, version=0, filter=[("col1", "==", 1)])
+    df = ddt.read_delta_table(partition_table, version=0, filter=[("col1", "=", 1)])
     assert df.compute().shape == (21, 3)
 
     df = ddt.read_delta_table(
-        partition_table, filter=[[("col1", "==", 1)], [("col1", "==", 2)]]
+        partition_table, filter=[[("col1", "=", 1)], [("col1", "=", 2)]]
     )
     assert df.compute().shape == (39, 4)
+
+
+def test_partition_filter_npartitions(partition_table):
+    # partition filter
+    x = ddt.read_delta_table(partition_table, version=0)
+    y = ddt.read_delta_table(partition_table, version=0, filter=[("col1", "=", 1)])
+    assert y.npartitions < x.npartitions
 
 
 def test_empty(empty_table1, empty_table2):
@@ -260,3 +267,7 @@ def test_catalog(simple_table):
             catalog="glue", database_name="stores", table_name="orders"
         )
         assert df.compute().shape == (200, 3)
+
+
+def test_build_partition_filter():
+    partition_columns = ['RegionName', 'quadkey']
